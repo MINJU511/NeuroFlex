@@ -157,3 +157,38 @@ plt.ylabel('CV classification score (% correct)')
 plt.ylim([30, 100])
 plt.title('Sensor space decoding')
 
+# Temporal generalization
+from mne.decoding import GeneralizingEstimator
+
+# Compute Area Under the Curver (AUC) Receiver Operator Curve (ROC) score
+# of time generalization. A perfect decoding would lead to AUCs of 1.
+# Chance level is at 0.5.
+# The default classifier is a linear SVM (C=1) after feature scaling.
+
+# Define the Temporal generalization object
+time_gen = GeneralizingEstimator(clf, n_jobs = 1, scoring='roc_auc', verbose=True)
+scores = cross_val_multiscore(time_gen, X, y, cv=3, n_jobs=1) # again, cv=3 just for speed
+# Mean scores across cross-validation splits
+scores = np.mean(scores, axis=0)
+
+'''# Plot the diagonal (it's exactly the same as the time-by-time decoding above)
+fig, ax = plt.subplots()
+ax.plot(n_times, np.diag(scores), label='score')
+ax.axhline(.5, color='k', linestyle='--', label='chance')
+ax.set_xlabel('Times')
+ax.set_ylabel('AUC')
+ax.legend()
+ax.axvline(.0, color='k', linestyle='-')
+ax.set_title('Decoding MEG sensors over time')'''
+
+#
+times = 1e3 * epochs.times # convert times to ms
+plt.imshow(scores, interpolation='spline16', origin='lower',
+           extent=[times[0], times[-1], times[0], times[-1]],
+           vmin=0., vmax=1.)
+plt.xlabel('Times Test (ms)')
+plt.ylabel('Times Train (ms)')
+plt.title('Time generalization (%s vs. %s)' % tuple(event_id.keys()))
+plt.axvline(0, color='k')
+plt.axhline(0, color='k')
+plt.colorbar()
