@@ -5,28 +5,101 @@ import itertools
 # simultae sensors
 nsens = 275
 corr_topo = np.linspace(1,.1,nsens)
-inc_topo  = np.flip(corr_topo)
+inc_topo = corr_topo
+#inc_topo  = np.flip(corr_topo)
 
 plt.plot(corr_topo)
 plt.plot(inc_topo)
 
 # Simulate signals
-tp = 1000 # how many time points?
+tp = 300 # how many time points?
 total_dur = 1 # total duration of whole signal in s
-sur = .2 # total duration of "signal part" (ERP)
-TS  = 1000 # sampling freq, calculate this from tp and total_dur
-sf = 5 # frequency of sinusoid component for ERP
+#sur = .2 # total duration of "signal part" (ERP)
+TS  = 300 # sampling freq, calculate this from tp and total_dur
+#sf = 5 # frequency of sinusoid component for ERP
 time_vec = np.linspace(1/TS,1,TS)# time vector
 
-# now the actual values
+'''# now the actual values
 sig_corr = np.sin(2*np.pi*sf*time_vec)
 # if you want to zero out some of the signal
 from_which_time = .5
 zero_times = time_vec > from_which_time
 
 sig_corr[zero_times] = 0
+sig_inc  = np.zeros(len(sig_corr))'''
+
+'''# Get Averaged ERF values from the data (all channels) --------------------------
+correct_erf = np.genfromtxt('correct_erf.csv', delimiter=',')
+incorrect_erf = np.genfromtxt('incorrect_erf.csv', delimiter=',')
+correct_erf = np.delete(correct_erf,-1,axis=1) #Remove the last column
+incorrect_erf = np.delete(incorrect_erf,-1,axis=1)
+
+correct_erf.shape #(275,300)
+incorrect_erf.shape #(275,300)
+sig_corr = correct_erf.mean(axis=0)
 sig_inc  = np.zeros(len(sig_corr))
 
+def mk_sample_realerf(n,m,noise_scal):
+    full_corr = []
+    full_inc = []
+    corr = []
+    inc = []
+    noise_scal = noise_scal
+    for i in range(n):
+        N = noise_scal * np.random.normal(size=len(sig_corr))
+        full_corr.append(sig_corr + N)
+        corr.append(np.transpose(np.asmatrix(corr_topo)) @ np.asmatrix(full_corr[i]))
+    for j in range(m):
+        N = noise_scal * np.random.normal(size=len(sig_corr))
+        full_inc.append(sig_inc + N)
+        inc.append(np.transpose(np.asmatrix(inc_topo)) @ np.asmatrix(full_inc[j]))
+    return corr, inc
+
+correct, incorrect = mk_sample_realerf(50,50,0.1)
+correct_array = np.array(correct) # (50, 275, 300) N of trials, channels, timepoints
+incorrect_array = np.array(incorrect)  # (50, 275, 300)
+'''
+
+
+# Get Averaged ERF values from the data (TOP30 channels) --------------------------
+correct_erf = np.genfromtxt('TOP30_correct_erf.csv', delimiter=',')
+incorrect_erf = np.genfromtxt('TOP30_incorrect_erf.csv', delimiter=',')
+correct_erf = np.delete(correct_erf,-1,axis=1) #Remove the last column
+incorrect_erf = np.delete(incorrect_erf,-1,axis=1)
+
+correct_erf.shape #(275,300)
+incorrect_erf.shape #(275,300)
+sig_corr = correct_erf.mean(axis=0)
+sig_inc  = np.zeros(len(sig_corr))
+
+def mk_sample_realerf(n,m,noise_scal):
+    full_corr = []
+    full_inc = []
+    corr = []
+    inc = []
+    noise_scal = noise_scal
+    for i in range(n):
+        N = noise_scal * np.random.normal(size=len(sig_corr))
+        full_corr.append(sig_corr + N)
+        corr.append(np.transpose(np.asmatrix(corr_topo)) @ np.asmatrix(full_corr[i]))
+    for j in range(m):
+        N = noise_scal * np.random.normal(size=len(sig_corr))
+        full_inc.append(sig_inc + N)
+        inc.append(np.transpose(np.asmatrix(inc_topo)) @ np.asmatrix(full_inc[j]))
+    return corr, inc
+
+correct, incorrect = mk_sample_realerf(50,50,1e-15)
+correct_array = np.array(correct) # (50, 275, 300) N of trials, channels, timepoints
+incorrect_array = np.array(incorrect)  # (50, 275, 300)
+
+plt.plot(time_vec,sig_corr)
+plt.plot(time_vec,sig_inc)
+plt.title('correct vs incorrect ERF (without noise)')
+
+plt.plot(time_vec, correct_array[0].mean(axis=0))
+plt.plot(time_vec, incorrect_array[0].mean(axis=0))
+plt.title('correct vs incorrect ERF (with noise scale 1e-15)')
+'''
 # Generate n correct samples and m incorrect samples
 def mk_sample(n,m,noise_scal):
     full_corr = []
@@ -44,12 +117,14 @@ def mk_sample(n,m,noise_scal):
         inc.append(np.transpose(np.asmatrix(inc_topo)) * np.asmatrix(full_inc[j]))
     return corr, inc
 
-correct , incorrect = mk_sample(120,24,0.5)
+correct , incorrect = mk_sample(50,50,0.5)
 correct.__len__() #60
 correct[0].shape #(275, 1000)
 
 correct_array = np.array(correct) # (60, 275, 1000)
 incorrect_array = np.array(incorrect)  # (12, 275, 1000)
+'''
+
 
 # 2. Fit the SVM model
 from sklearn.svm import SVC
@@ -62,13 +137,13 @@ cv = ShuffleSplit(10, test_size=0.2, random_state=42)
 
 # 3. 일단은 time point별 아닌, 그냥 전체 time point of each epoch 가지고 predict.
 # The goal is going to be to learn on 80% of the epochs and evaluate on the remaining 20% of trials if we can predict accuratly.
-X = np.concatenate((correct_array,incorrect_array)) # (72, 275, 1000)
-X_2d = X.reshape(len(X), -1) # (72, 275000)
-y = [1]*120 + [0]*24
+X = np.concatenate((correct_array,incorrect_array)) # (100, 275, 300)
+X_2d = X.reshape(len(X), -1) # (100, 82500)
+y = [1]*50 + [0]*50
 
 scores_full = cross_val_score(clf, X_2d, y, cv=cv, n_jobs=1)
 print("Classification score: %s (std. %s)" % (np.mean(scores_full), np.std(scores_full)))
-# Classification score: 1.0 (std. 0.0)
+# Classification score: 0.6399999999999999 (std. 0.15297058540778355)
 
 # 4. Now the separate decoders at each time point
 # It's also possible to run the same decoder and each time point to know when in time the conditions can be better classified:
@@ -101,7 +176,7 @@ hyp_limits = (scores - std_scores, scores + std_scores)
 #plt.fill_between(times, hyp_limits[0], y2=hyp_limits[1], color='b', alpha=0.5)
 plt.xlabel('Times (ms)')
 plt.ylabel('CV classification score (% correct)')
-plt.ylim([30, 120])
+plt.ylim([0, 120])
 plt.title('Sensor space decoding')
 plt.show()
 
